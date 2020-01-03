@@ -29,7 +29,7 @@
 
 
 
-这时候新项目里还是不包含任何代码的，我们需要在`src/main/java``和src/main/kotlin`的文件夹下分别编写和创建`java`和`kotlin`文件。注意不要放错了，否则编译时能通过运行时会告诉你`NoClassDefineFoundError`。
+这时候新项目里还是不包含任何代码的，我们需要在`src/main/java`和`src/main/kotlin`的文件夹下分别编写和创建`java`和`kotlin`文件。注意不要放错了，否则编译时能通过运行时会告诉你`NoClassDefineFoundError`。
 
 ## 4 PSI和VFS
 在正式编写插件之前，我们首先要了解到时候我们怎么使用openapi直接访问和修改我们的源码，这里涉及到两个重要的东西Psi和VFS。
@@ -75,11 +75,15 @@ Psi就是程序结构接口（Program Structure Interface），用来描述IDEA�
 
 ### 4.4 怎么修改Psi？
 
+所有的Psi都扩展自PsiElement接口，PsiElement接口最基本的修改方法有：
+
+* `add()` 向已有的添加子节点
+* `delete()` 删除当前节点
+* `replace()` 替换当前节点
 
 
 
-
-如果你要在其他地方修改Psi时收到通知，用`PsiManager.getInstance().addPsiTreeChangeListener()`，上面有多个回调，这一块源码都有注释，所以我就不展开来讲了，有兴趣的同学可以自己去研究。
+如果你要在其他地方修改Psi时收到通知，用`PsiManager.getInstance().addPsiTreeChangeListener()`，上面有多个回调，恰好这一块源码少见的都有注释，所以我就不展开来讲了，有兴趣的同学可以自己去研究。
 
 ### 4.5 什么是VFS？
 
@@ -105,14 +109,34 @@ VFS就是虚拟文件系统，与PSI不同，它是和Project无关的，所以`
 
 图中圈出的部分，都是我们开发中常用到的Action，包括新建文件，开始调试等等，都是Action。
 
-![](C:/Users/Luke/Desktop/Gitbook/assets/16f50376820d5289.png)
+![](./assets/16f50376820d5289.png)
 
 
 ### 创建Action的两种方式
 
+第一种就是使用New→Plugin Devkit→Action来创建。
 
+![image-20200102205308526](./assets/image-20200102205308526.png)
 
+点击后会弹出一个窗口，让你填写该Action的相关信息。
 
+![]()
+
+```
+
+```
+
+这样创建的Action，IDEA会自动帮你在plugin.xml中进行注册，所注册的信息也就是是刚才我们所填写的信息。
+
+![]()
+
+另一种创建Action的办法，就是先继承AnAction，编写相关代码后，再自己到plugin.xml去注册
+
+```
+
+```
+
+两种创建方法各有优劣，但其实只是步骤不同，本质上做的事情是一样的，读者可以根据自己的需要进行使用。
 
 ### 使用加载模板并使用Action创建文件
 
@@ -142,7 +166,7 @@ VFS就是虚拟文件系统，与PSI不同，它是和Project无关的，所以`
 
 在同一网络环境中，通过使用Mock App扫描Studio提供的二维码，就可以在真机上实时预览布局。
 
-当然，在最初的版本中，这个功能还是比较鸡肋的，因为一开始Gbox的Mock模块是使用AndroidStudio的控制台来绘制二维码。这在白色主题下的Studio工作是完全正常的，但如果在黑色主题下，由于黑白颠倒，所以zxing库就无法识别了，导致有些同学扫码之后出错后者没反应，到最后不得不在后面的版本加上让使用者更换Studio颜色的提示，这种体验实际上是相当糟糕的。
+当然，在最初的版本中，这个功能还是比较鸡肋的，因为一开始Gbox的Mock模块是使用AndroidStudio的控制台来绘制二维码。这在白色主题下的Studio工作是完全正常的，但如果在黑色主题下，由于黑白颠倒，所以zxing库就无法识别了，导致有些同学扫码之后出错后者没反应，到最后不得不在后面的版本的控制台输出中加上让使用者更换Studio颜色的提示，这种体验实际上是相当糟糕的。
 
 ![](./assets/16e4128ca0f97d4b.png)
 
@@ -150,7 +174,7 @@ VFS就是虚拟文件系统，与PSI不同，它是和Project无关的，所以`
 
 ![新二维码图片]()
 
-这个窗口的原理很简单，其实就是在ProcessHandler上管理了一个JFrame罢了，二维码是用Google的zxing生成的，然后搞了一个awt的BuffedImage渲染上去，纯属调API操作，所以我就直接贴代码了：
+这个窗口的原理很简单，其实就是管理了一个JFrame的生命周期罢了，二维码是用Google的zxing生成的，然后搞了一个awt的BuffedImage渲染上去，纯属调API操作，所以我就直接贴代码了：
 
 [src/main/kotlin/com/guet/flexbox/handshake/mock/QrCodeForm.kt](https://github.com/sanyuankexie/handshake/blob/master/src/main/kotlin/com/guet/flexbox/handshake/mock/QrCodeForm.kt)
 
