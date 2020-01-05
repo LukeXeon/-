@@ -131,6 +131,12 @@ PsiElement是用**双向链表**的方式来组织其子节点（子树的），
 * 对于XmlAttribute，提供了`getValue()`和`setValue()`方法。
 * 对于XmlTag提供了，提供了`setAttribute()`和`getAttribute()`方法。
 
+对于Java，这里我只举一个例子，修改包名：
+
+```kotlin
+psiJavaElement.getContainingFile().setPackageName(pkgName)
+```
+
 每种语言的API差异很大，如果你在开发相关插件，那就可能需要你读一下源码了，本文只能是介绍一下，说一些官方Doc里没有的东西，告诉你Psi大概是个什么东西。
 
 如果你要在其他地方修改Psi时收到通知，用`PsiManager.getInstance().addPsiTreeChangeListener()`，上面有多个回调，但是我们通常不需要实现那么多的回调，所以openapi提供了一个类`PsiTreeChangeAdapter`，我们使用它就好了。
@@ -199,15 +205,6 @@ class Test : AnAction(){
     }
 }
 ```
-
-actionPerformed会传入一个AnActionEvent，我们可以从AnActionEvent中获取Psi。
-
-```java
-e.getData(CommonDataKeys.PSI_ELEMENT)
-```
-
-还可以用`CommonDataKeys`获取Project，Editor等等，然后可以在方法体中触发我们修改Psi的代码。
-
 怎么给Action改图标呢？首先咱么得搞个图标过来，将图标文件放在`main/resources`下面：
 
 <img src="../../截屏2020-01-05下午10.59.38.png" alt="截屏2020-01-05下午10.59.38" style="zoom:50%;" />
@@ -228,9 +225,18 @@ class Test : AnAction(fileIcon){
 }
 ```
 
-### 5.3 使用Action加载模板创建文件
+现在我们来关注actionPerformed这个函数重写，当Action被点击时，这个函数会被调用，此时会会传入一个AnActionEvent，我们可以从AnActionEvent中获取Psi。
 
-要用Action创建文件，继承`CreateElementActionBase`会很方便，它是AnAction的子类，专为创建文件而准备。
+```java
+e.getData(CommonDataKeys.PSI_ELEMENT)
+```
+
+还可以用`CommonDataKeys`获取Project，Editor等等，然后可以在方法体中触发`actionPerformed`我们修改Psi的代码。
+
+
+### 5.3 使用模板
+
+如果要用Action创建文件，继承openapi为我们封装的`CreateElementActionBase`会很方便，它是AnAction的子类，专为创建文件而准备。
 
 ```kotlin
 class NewFlexmlAction : CreateElementActionBase("", "", fileIcon) 
@@ -279,13 +285,13 @@ class NewFlexmlAction : CreateElementActionBase("", "", fileIcon)
 
 然后我们需要重写create函数来执行实际的文件创建操作。
 
-我们用`FileTemplateManager.getInstance()`获得模板管理器，然后用名字获取模板，注意在下面的
+我们用`FileTemplateManager.getInstance()`获得模板管理器，然后用名字获取模板，注意在下面代码中
 
 ```kotlin
   	val text = template.getText(Collections.singletonMap("test", newName))
 ```
 
-中，我们传入了test用来替换模板中的`${test}`
+我们以Map的形式传入了test用来替换模板中的`${test}`
 
 ```kotlin
     override fun create(newName: String, directory: PsiDirectory): Array<PsiElement> {
@@ -306,19 +312,17 @@ class NewFlexmlAction : CreateElementActionBase("", "", fileIcon)
     }
 ```
 
-### 5.4 结合Psi和VFS整点花活
-
-
-
- 
-
 ## 6 自定义语言和识别文件格式
+
+
+
+
 
 ### Lexer
 
 
 
-## 代码补全
+## 7 代码补全
 
 ### 常规做法
 
@@ -326,7 +330,7 @@ class NewFlexmlAction : CreateElementActionBase("", "", fileIcon)
 
 
 
-## 开始运行我们的DSL
+## 8 让我们的DSL在IDEA上跑起来
 
 ### 运行配置
 
@@ -452,31 +456,34 @@ class QrCodeForm(url: String) : JFrame() {
 
 **PS**：但是不建议大家这么做啊，特别是当你要运行的调试程序本来就是一个外置程序的时候，不建议大家把代码内置，而应该使用类似继承`BaseProcessHandler`之类ProcessHandler来启动外部程序。
 
-## openapi中一些常用的类汇总
+## 9 常用类和注意事项
 
-### 共用线程池
+### 9.1 openapi中的常用类和方法
 
-### PsiTreeUtil
+* 共用线程池
 
-### 各种Manager
+* PsiTreeUtil
 
-* VirtualFileManager
+* 各种Manager，VirtualFileManager
 
+### 9.2 其他注意事项
 
+* 插件使用独立的ClassLoader进行加载，所以你在依赖openapi的其他模块的时候一定要记得在plugin.xml中声明依赖，否则会在运行时报找不到类，下面是handshake的依赖。
 
-## 其他注意事项
+```xml
+    <depends>com.intellij.modules.xml</depends>
+    <depends>com.intellij.modules.lang</depends>
+    <depends>com.intellij.modules.json</depends>
+```
 
-插件使用独立的ClassLoader进行加载，【声明依赖】
+* 注意你的目录kotlin和java的文件不能混淆，除非你在build.gradle中手动指定sourceSet，否则也会找不到类（熟悉Gradle的朋友应该已经知道了，这是给不熟悉的朋友强调的）
 
-注意你的目录kotlin和java的文件不能混淆，除非你在build.gradle中手动指定sourceSet
+## 10 结语
+### 10.1 更新插件对GBox有什么影响？
 
-
-
-
-## 更新插件对GBox有什么影响？
 显而易见的拥有插件之后开发Gbox的布局变得更快了，并且调试和编译都很方便，还很容易的就能将布局代码和VCS集成。当然Gbox的插件还有很多不足，例如由于我对openapi的研究有限，现在还没法实现attributeValue中的智能补全，待今后继续研究之后，会慢慢加上。
 
-## 参考资料
+### 10.2 本文参考资料
 国内涉及插件开发的文章非常稀有，而且由于openapi的源码是几乎没有任何注释的，导致很多时候明知道某个功能能实现但却不知道怎么写就非常蛋疼。自己在开发的时候参考了阿里前辈moxun（有`xxx@apache.org`邮箱的大佬）开发的weex的IDEA插件以及读了不知道多少IDEA的源码之后才不怎么顺利的开发出来（但其实也就花了三四天的样子，openapi代码质量很高，但很多源码没注释没文档就是感觉恶心）。
 
 下面本编文章和插件开发中的是主要的参考资料。
@@ -486,12 +493,12 @@ class QrCodeForm(url: String) : JFrame() {
 
 当然IntelliJ Platform的openapi很庞大，本文所涉及的只是开发Gbox插件要用到的很小的一部分，很多有关ui、lexer、bnf等相关技巧就需要读者进一步去读文档和源码了。
 
-## 获取相关源码
+### 10.3 获取相关源码
 
 * 追求性能的动态布局框架【[Gbox](https://github.com/sanyuankexie/Gbox)】
 * 与**Gbox**配套的IDEA插件【[handshake](https://github.com/sanyuankexie/handshake)】
 * weex的IDEA插件【[weex-language-support](https://github.com/misakuo/weex-language-support)】
 
-## 结语&关于我
+### 10.4 关于我
 
 之前在掘金上发沸点，可能是因为我说话太骚了，居然有人质疑我是骗子，偏赞的那种，我也是醉了，虽然后来澄清了，不过还是在这里解释一下，我是应届生，虽然拿了offer，但是人还没毕业入职呢。自己很关心前沿技术和核心技术的发展，所以也会写一些所谓的技术文章，热衷于分享和开源，对自己学过的技术不会保留，只是可能没事间码那么多字罢了（说到底还不是因为我是一条懒狗）。
