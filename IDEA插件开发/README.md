@@ -161,6 +161,9 @@ VFS就是虚拟文件系统，与Psi不同，它是和Project无关的，所以`
 
 ![](./assets/16f50376820d5289.png)
 
+在代码中右键的时候打开的菜单，也是一组Action，并且你还能拿到该处的Psi。
+
+<img src="assets/截屏2020-01-06上午12.58.07.png" alt="截屏2020-01-06上午12.58.07" style="zoom:50%;" />
 
 ### 5.2 创建Action
 
@@ -225,13 +228,13 @@ class Test : AnAction(fileIcon){
 }
 ```
 
-现在我们来关注actionPerformed这个函数重写，当Action被点击时，这个函数会被调用，此时会会传入一个AnActionEvent，我们可以从AnActionEvent中获取Psi。
+现在我们来关注actionPerformed这个函数重写，当Action被点击时，这个函数会被调用，此时会会传入一个AnActionEvent，AnActionEvent是一个类似上下文之类的东西，我们可以从这拿到很多东西，例如我们可以从AnActionEvent中获取Psi。
 
 ```java
 e.getData(CommonDataKeys.PSI_ELEMENT)
 ```
 
-还可以用`CommonDataKeys`获取Project，Editor等等，然后可以在方法体中触发`actionPerformed`我们修改Psi的代码。
+还可以用`CommonDataKeys`获取Project，Editor等等，然后可以在`actionPerformed`的方法体中触发我们修改Psi的代码，接下来的就得靠你发挥想象力去搞你自己的插件了。
 
 
 ### 5.3 使用模板
