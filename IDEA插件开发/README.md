@@ -1,5 +1,8 @@
 ## 1 前言
 前段时间刚从美团实习返校，手头上堆了一堆事情要忙，人直接傻掉了，学校搞工程专业认证的时候总能给你整点新花样，加之后面冬季寒冷，自己不小心又瘟了一段时间，导致一直没有产出文章，现在重感冒刚刚好，恰好自己这段时间也学了一点是有关IDEA插件开发的相关知识，在这里分享给大家。
+
+**PS**：本着kotlin first的原则，本文大部分时候使用的是kotlin，并且openapi中很大一部分也已经是kotlin编写的了。
+
 ## 2 IntelliJ插件是什么？
 这么说吧，不管是IDEA也好还是咱用的Android Studio也好，其实都是基于Jetbrains IntelliJ平台的软件。而Android Studio本质上也就是IDEA+Android Gradle Plugin+IDEA Android Plugin罢了。
 
@@ -65,13 +68,55 @@ Psi就是程序结构接口（Program Structure Interface），用来描述IDEA�
 * 从`PsiDocumentManager.getInstance().getPsiFile()`获取PsiFile
 * 或者使用`FilenameIndex.getFilesByName()`搜索项目中具有指定名称的所有文件
 
-根据上面的那张图，我们知道PsiFile是Psi树形结构的根，拿到了PsiFile之后，我们就可将他强制类型转换为PsiFile的扩展类型比如XmlFile、JavaFile等等来对其语法格式进行访问。
+根据上面的那张图，我们知道PsiFile是Psi树形结构的根，有了PsiFile之后，我们就可以遍历这整棵树。
+
+PsiElement是用**双向链表**的方式来组织其子节点（子树的），并且每个PsiElement上都保存着其直接子节点练成的**双端链表**的**头尾**节点，分别可以用` getFirstChild()`和`getLastChild()`来直接拿到。
+
+```java
+  /**
+   * Returns the first child of the PSI element.
+   *
+   * @return the first child, or null if the element has no children.
+   */
+  @Contract(pure=true)
+  PsiElement getFirstChild();
+
+  /**
+   * Returns the last child of the PSI element.
+   *
+   * @return the last child, or null if the element has no children.
+   */
+  @Contract(pure=true)
+  PsiElement getLastChild();
+```
+
+当我们在一个PsiElement中要拿到下一个或者前一个PsiElement（**兄弟节点**）时，我们又有`getNextSibling()`和`getPrevSibling()`。
+
+```java
+  /**
+   * Returns the next sibling of the PSI element.
+   *
+   * @return the next sibling, or null if the node is the last in the list of siblings.
+   */
+  @Contract(pure=true)
+  PsiElement getNextSibling();
+
+  /**
+   * Returns the previous sibling of the PSI element.
+   *
+   * @return the previous sibling, or null if the node is the first in the list of siblings.
+   */
+  @Contract(pure=true)
+  PsiElement getPrevSibling();
+```
+
+除此之外我们还可以将他强制类型转换为PsiFile的扩展类型比如XmlFile、JavaFile等等来对其语法格式进行访问，或者将PsiElement转换为诸如XmlTag、XmlAttribute之类的子接口来使用更多方法。
 
 当然，我们也可以通过任意一个PsiFile的子节点（比如XmlTag），在其上调用`psiElement.getContainingFile()`获取其PsiFile。
 
 ### 4.3 怎么创建Psi？
 
-那么如果我们像主动创建Psi文件该怎么弄呢？我们可以使用`PsiFileFactory.getInstance()`，然后从使用文本创建PsiFile，创建完之后，我们还要找一个PsiDictionary调用它的add把新的PsiFile添加进去。下文我们将编写创建文件的Action，也要用到这些API。
+那么如果我们像主动创建Psi文件该怎么弄呢？我们可以使用`PsiFileFactory.getInstance()`，然后调用`createFileFromText`从文本创建PsiFile，创建完之后，我们还要找一个PsiDictionary调用它的add把新的PsiFile添加进去。下文我们将编写创建文件的Action，也要用到这些API。
 
 ### 4.4 怎么修改Psi？
 
@@ -81,64 +126,195 @@ Psi就是程序结构接口（Program Structure Interface），用来描述IDEA�
 * `delete()` 删除当前节点
 * `replace()` 替换当前节点
 
+对于Xml而言则提供了更多支持：
 
+* 对于XmlAttribute，提供了`getValue()`和`setValue()`方法。
+* 对于XmlTag提供了，提供了`setAttribute()`和`getAttribute()`方法。
 
-如果你要在其他地方修改Psi时收到通知，用`PsiManager.getInstance().addPsiTreeChangeListener()`，上面有多个回调，恰好这一块源码少见的都有注释，所以我就不展开来讲了，有兴趣的同学可以自己去研究。
+每种语言的API差异很大，如果你在开发相关插件，那就可能需要你读一下源码了，本文只能是介绍一下，说一些官方Doc里没有的东西，告诉你Psi大概是个什么东西。
+
+如果你要在其他地方修改Psi时收到通知，用`PsiManager.getInstance().addPsiTreeChangeListener()`，上面有多个回调，但是我们通常不需要实现那么多的回调，所以openapi提供了一个类`PsiTreeChangeAdapter`，我们使用它就好了。
 
 ### 4.5 什么是VFS？
 
-VFS就是虚拟文件系统，与PSI不同，它是和Project无关的，所以`VirtualFileManager.getInstance()`不需要Project作为参数，它的VirtualFile更接近我们对一般文件的理解，它可以`getOutputStream()`和`getInputStream()`来对文件进行直接彻底的修改和读取，这都是Psi做不到的。
+VFS就是虚拟文件系统，与Psi不同，它是和Project无关的，所以`VirtualFileManager.getInstance()`不需要Project作为参数，它的VirtualFile更接近我们对一般文件的理解，它可以`getOutputStream()`和`getInputStream()`来对文件进行直接彻底的修改和读取，这都是Psi做不到的。
 
 ### 4.6 PSI与VFS的区别
 
 要说PSI和VFS的区别的话，我个人理解PSI是对源码的结构化读取和修改，而VFS就是对源码的非结构化读取和修改，两者在openapi中是可以直接相互转换的，VF和通过`PsiManager.getInstance().findFile()`转换为Psi，Psi也可以直接通过`getVirtualFile()`得到VF。
 
-## 5 自定义语言和文件格式
-
-### Lexer
-
-
-
-## 6 自定义Action
+## 5 自定义Action
 
 搞懂怎么操作Psi之后，其实你就已经可以写出一个能改自己源代码的小小插件了，只是我们还需要一个按钮去触发它，而实现这个功能的东西，就叫Action。
 
 之前铺垫了那么多，搞了那么多看不见的东西后，咱是时候得搞点看得见得东西了。
 
-### 6.1 什么是Action？
+### 5.1 什么是Action？
 
 图中圈出的部分，都是我们开发中常用到的Action，包括新建文件，开始调试等等，都是Action。
 
 ![](./assets/16f50376820d5289.png)
 
 
-### 创建Action的两种方式
+### 5.2 创建Action
 
-第一种就是使用New→Plugin Devkit→Action来创建。
+Action可以使用New→Plugin Devkit→Action来快速创建。
 
 ![image-20200102205308526](./assets/image-20200102205308526.png)
 
-点击后会弹出一个窗口，让你填写该Action的相关信息。
+点击后会弹出一个窗口，让你填写该Action的相关信息，点击OK后就会为你生成Action的实现类。
 
-![]()
+![1111](assets/1111.png)
 
-```
+这么多参数都是干嘛的？
 
-```
+* Action ID 这个要**唯一**，就是包名加上一个动作的名字，比如你要新建一个动作是创建文件用的，在`com.test`这个包下面，那就起名叫`com.test.new`就行了。
+* Class Name 就是你实现类的名字。
+* Name 按钮的名字，这个是后面会显示在按钮图标旁边的名字。
+* Description 描述信息，随便填。
+* 然后下面选Group，每一个Action，都有自己的Group，比如新建文件的组叫做`NewGroup`，比如我们最常用的金刚按键（调试、运行）放在`RunDashboardContentToolbar`组，选好组后，右边还要让你选一个Action，这是干嘛呢？再往右边看你还会看到一个Anchor，这是决定你信加进来的Action，要出现在之前已经有的Action的什么位置。
 
 这样创建的Action，IDEA会自动帮你在plugin.xml中进行注册，所注册的信息也就是是刚才我们所填写的信息。
 
-![]()
-
-另一种创建Action的办法，就是先继承AnAction，编写相关代码后，再自己到plugin.xml去注册
-
+```xml
+    <actions>
+        <!-- Add your actions here -->
+        <action id="dad" class="com.guet.flexbox.handshake.util.Test" text="adsasd" description="asdad">
+            <add-to-group group-id="RunDashboardContentToolbar" anchor="first"/>
+        </action>
+    </actions>
 ```
 
+生成的模板Action会自动继承AnAction。
+
+```kotlin
+package com.guet.flexbox.handshake.util;
+
+import com.intellij.openapi.actionSystem.AnAction;
+import com.intellij.openapi.actionSystem.AnActionEvent;
+
+class Test : AnAction(){
+    override fun actionPerformed(e: AnActionEvent) {
+        TODO("not implemented")
+    }
+}
 ```
 
-两种创建方法各有优劣，但其实只是步骤不同，本质上做的事情是一样的，读者可以根据自己的需要进行使用。
+actionPerformed会传入一个AnActionEvent，我们可以从AnActionEvent中获取Psi。
 
-### 使用加载模板并使用Action创建文件
+```java
+e.getData(CommonDataKeys.PSI_ELEMENT)
+```
+
+还可以用`CommonDataKeys`获取Project，Editor等等，然后可以在方法体中触发我们修改Psi的代码。
+
+怎么给Action改图标呢？首先咱么得搞个图标过来，将图标文件放在`main/resources`下面：
+
+<img src="../../截屏2020-01-05下午10.59.38.png" alt="截屏2020-01-05下午10.59.38" style="zoom:50%;" />
+
+然后用IconLoader把他加载进来，找一个地方缓存下来（最好是用单例模式缓存下来，防止重复加载）
+
+```kotlin
+val fileIcon = IconLoader.getIcon("icons/icon_file.png")
+```
+
+然后改写构造函数：
+
+```kotlin
+class Test : AnAction(fileIcon){
+    override fun actionPerformed(e: AnActionEvent) {
+        TODO("not implemented") 
+    }
+}
+```
+
+### 5.3 使用Action加载模板创建文件
+
+要用Action创建文件，继承`CreateElementActionBase`会很方便，它是AnAction的子类，专为创建文件而准备。
+
+```kotlin
+class NewFlexmlAction : CreateElementActionBase("", "", fileIcon) 
+```
+
+构造函数的前两个参数text和description可以不写，第三个是图标，跟上面一样，我们传入fileIcon，然后我们需要重写invokeDialog来创建对话框。
+
+这里面我们创建CreateElementActionBase的内部类MyInputValidator（输入验证器），然后调用`Messages.showInputDialog`就能创建对话框。
+
+```kotlin
+    override fun invokeDialog(project: Project?, directory: PsiDirectory?): Array<PsiElement> {
+        val inputValidator = this.MyInputValidator(project, directory)
+        Messages.showInputDialog(
+            project,
+            "New a flexml dsl file",
+            "New a flexml dsl file",
+            null,
+            "",
+            inputValidator
+        )
+        return inputValidator.createdElements
+    }
+```
+
+在创建.java文件时，IDEA往往会帮我们写一些代码，这些代码其实是从模板生成的，我们可以在模板中写一些变量，比如下面的test，之后我们可以在代码中调用方法替换掉test。
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<${test}>
+
+</${test}>
+```
+
+然后我们我们把模板放到`main/resources/fileTemplates/internal`下面（注意这个是IDEA的约定目录不要放错了），然后在文件的原本后缀名上添加.ft后缀名。
+
+<img src="assets/截屏2020-01-05下午11.22.05.png" alt="截屏2020-01-05下午11.22.05" style="zoom:50%;" />
+
+然后在plugin.xml中注册模板（模板名字唯一且不带任何后缀名）。
+
+```
+<extensions defaultExtensionNs="com.intellij">
+<!-- Add your extensions here -->
+<internalFileTemplate name="flexml_file"/>
+</extensions>
+```
+
+然后我们需要重写create函数来执行实际的文件创建操作。
+
+我们用`FileTemplateManager.getInstance()`获得模板管理器，然后用名字获取模板，注意在下面的
+
+```kotlin
+  	val text = template.getText(Collections.singletonMap("test", newName))
+```
+
+中，我们传入了test用来替换模板中的`${test}`
+
+```kotlin
+    override fun create(newName: String, directory: PsiDirectory): Array<PsiElement> {
+        val ext = ".${FlexmlFileType.defaultExtension}"
+        val filename = if (newName.endsWith(ext)) {
+            newName
+        } else {
+            newName + ext
+        }
+        val template = FileTemplateManager.getInstance(directory.project)
+            .getInternalTemplate("flexml_file")
+  			val text = template.getText(Collections.singletonMap("test", newName))
+        val factory = PsiFileFactory.getInstance(directory.project)
+        val file = factory.createFileFromText(filename, FlexmlFileType, text)
+        CodeStyleManager.getInstance(directory.project).reformat(file)
+        directory.add(file)
+        return arrayOf(file)
+    }
+```
+
+### 5.4 结合Psi和VFS整点花活
+
+
+
+ 
+
+## 6 自定义语言和识别文件格式
+
+### Lexer
 
 
 
@@ -175,6 +351,8 @@ VFS就是虚拟文件系统，与PSI不同，它是和Project无关的，所以`
 ![新二维码图片]()
 
 这个窗口的原理很简单，其实就是管理了一个JFrame的生命周期罢了，二维码是用Google的zxing生成的，然后搞了一个awt的BuffedImage渲染上去，纯属调API操作，所以我就直接贴代码了：
+
+**PS**：说句题外话，看到这里也许有同学会震惊，IDEA这么好用的东西居然是垃圾swing写的？其实我的好几个写Java的朋友都一直以为IDEA这么好用的东西一定是C++写的，当我告诉他们IDEA是swing写的时候，他们无一例外的都感到不可思议，感觉就像是什么美好的东西美好的东西破灭了一样......
 
 [src/main/kotlin/com/guet/flexbox/handshake/mock/QrCodeForm.kt](https://github.com/sanyuankexie/handshake/blob/master/src/main/kotlin/com/guet/flexbox/handshake/mock/QrCodeForm.kt)
 
@@ -280,7 +458,7 @@ class QrCodeForm(url: String) : JFrame() {
 
 ### PsiTreeUtil
 
-### openapi中的Manager
+### 各种Manager
 
 * VirtualFileManager
 
