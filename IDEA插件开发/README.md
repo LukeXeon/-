@@ -456,7 +456,7 @@ object SimpleFileType : LanguageFileType(SimpleLanguage) {
 
 ![](assets/file_type_factory.png)
 
-在这里提一下Gbox，也算是给大家一种其他的思路，它算是比较讨巧的那种，因为它说白了就是xml，所以不需要编写额外的词法分析和解析的代码，所以Gbox的FileType是这样的：
+在这里提一下Gbox，也算是给大家一种其他的思路，它算是比较讨巧的那种，因为它说白了就是xml，不需要编写额外的词法分析和解析的代码，所以Gbox的FileType是这样的：
 
 ```kotlin
 object FlexmlFileType : XmlLikeFileType(XMLLanguage.INSTANCE) {
@@ -586,7 +586,11 @@ Gbox其实在这方面做得是不完整的。
 ### 10.2 本文参考资料
 国内涉及插件开发的文章非常稀有，而且由于openapi的源码是几乎没有任何注释的，导致很多时候明知道某个功能能实现但却不知道怎么写就非常蛋疼（你在IDEA里看到过的功能openapi都能实现）。
 
-自己在开发的时候发现了阿里前辈[moxun](https://github.com/misakuo)写的相关文章（有`xxx@apache.org`邮箱的大佬，👀到他github上用的是炮姐的👤头像，他也是二刺螈？👴❤️了！），在参考了moxun大神开发的weex的IDEA插件后，自己又读了不知道多少IDEA的源码才不怎么顺利的开发出来（但其实也就花了三四天的样子，openapi代码质量很高，但很多源码没注释没文档就是感觉恶心）。
+自己在开发的时候发现了阿里前辈[moxun](https://github.com/misakuo)写的相关文章（有`xxx@apache.org`邮箱的大佬，我👀到他github上用的是炮姐的👤头像，他也是二刺螈？！👴❤️了！）。
+
+在参考了moxun大神开发的weex的IDEA插件后，自己又读了不知道多少IDEA的源码，才不怎么顺利的开发出来（但其实也就花了三四天的样子，还没写这篇文章费劲呢，这篇文章我前前后后至少写了一个星期）。
+
+openapi代码质量是很高，但很多源码没注释没文档但还是感觉有些恶心，很多时候你得先错一遍，才能从报错的堆栈信息中找到正确写法的提示。
 
 下面本编文章和插件开发中的是主要的参考资料。
 
