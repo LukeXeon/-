@@ -128,14 +128,20 @@ PsiElement是用**双向链表**的方式来组织其子节点（子树的），
 
 对于Xml而言则提供了更多支持：
 
-* 对于XmlAttribute，提供了`getValue()`和`setValue()`方法。
-* 对于XmlTag提供了，提供了`setAttribute()`和`getAttribute()`方法。
+* 比如对于XmlAttribute，提供了`getValue()`和`setValue()`方法。
+* 比如对于XmlTag提供了，提供了`setAttribute()`和`getAttribute()`方法。
 
-对于Java，这里我只举一个例子，修改包名：
+对于Java的Psi，能做的事情太多，所以这里我只举几个典型例子
+
+* 修改包名
 
 ```kotlin
 psiJavaElement.getContainingFile().setPackageName(pkgName)
 ```
+
+【。。。。。】
+
+
 
 每种语言的API差异很大，如果你在开发相关插件，那就可能需要你读一下源码了，本文只能是介绍一下，说一些官方Doc里没有的东西，告诉你Psi大概是个什么东西。
 
@@ -279,10 +285,10 @@ class NewFlexmlAction : CreateElementActionBase("", "", fileIcon)
 
 然后在plugin.xml中注册模板（模板名字唯一且不带任何后缀名）。
 
-```
+```xml
 <extensions defaultExtensionNs="com.intellij">
-<!-- Add your extensions here -->
-<internalFileTemplate name="flexml_file"/>
+	<!-- Add your extensions here -->
+	<internalFileTemplate name="flexml_file"/>
 </extensions>
 ```
 
@@ -319,15 +325,71 @@ class NewFlexmlAction : CreateElementActionBase("", "", fileIcon)
 
 ### 6.1 定义语言和文件类型
 
-还记得大明湖畔的fileIcon吗，就是我们之前在Action那加载的那个图标它又派上用场了。
+直接像下面这么写，你就创建了一种叫Simple新语言了。
 
-### 6.2 词法分析和解析
+```kotlin
+object SimpleLanguage:Language("Simple")
+```
 
-BNF（巴科斯范式）是一种用来描述语法一种范式。IDEA是支持从BNF来生成语法解析器的，但这里涉及到的BNF说实话有点超纲了。因为很多人也许根本就不会真正地去开发一门新的语言，而是基于已经存在的语言制作插件来优化编码，真正能开发一门新语言的人也不会听我在这跟他讲BNF，所以本段落点到为止，只是提一下，不会展开讲，感兴趣的同学可以[参考jetbrains的文档](http://www.jetbrains.org/intellij/sdk/docs/tutorials/custom_language_support/grammar_and_parser.html)，以及与编译原理相关的书籍。
+但是它现在还比较low，它一无所有，连自己文件的后缀名叫什么都不知道，所以我们还要告诉IDEA，这种语言的文件应该是怎么样的，所以我们要创建它的文件类型。还记得大明湖畔的fileIcon吗，就是我们之前在Action那加载的那个图标，它又派上用场了。
 
-关于编译原理的相关书籍，那本黑皮的编译原理我就不推荐了，买了块🧱当枕头垫真的没啥意思。很多大佬说这书🐂🍺，但反正我是没看懂（书里的概念都是对的，但基本不说人话）。我觉得真正让我对编译原理有点概念的书是一个叫**前桥和弥**的🇯🇵大佬写的[《自制编程语言》](https://book.douban.com/subject/25735333/)，在豆瓣评分上有**7.9**的高评分，它最后会教你整出一个阉割版的Java，还是挺复杂的，有兴趣的同学可以关注一下。
+```kotlin
 
-这里提一下Gbox，它算是比较讨巧的那种，因为它说白了就是xml，所以避开了词法分析和解析。编写插件其实也只是为了扩展特殊xml在IDEA中的功能。
+object SimpleFileType : LanguageFileType(SimpleLanguage) {
+
+    override fun getIcon(): Icon = fileIcon
+
+    override fun getName(): String = "simple dsl"
+
+    override fun getDefaultExtension(): String = "simple"
+
+    override fun getDescription(): String = "simple style dsl file"
+}
+
+```
+
+然后在plugin.xml中注册。
+
+```xml
+    <extensions defaultExtensionNs="com.intellij">
+        <fileType name="Simple file" implementationClass="org.kexie.SimpleFileType" fieldName="INSTANCE"
+                  language="Simple" extensions="simple"/>
+        <!-- Add your extensions here -->
+    </extensions>
+```
+
+现在运行插件，你会发现创建的`.simple`文件已经能够被自动识别了，加上之前在自定义Action那里我们学到的创建文件，现在就可以一口气打通特殊文件从无到有的流程了。
+
+![](assets/file_type_factory.png)
+
+### 6.2 语法和词法的解析
+
+熟悉编译原理的同学一定都知道yacc、flex、lexer、bnf之类的名词。
+
+IDEA是支持从BNF（巴科斯范式）来生成语法解析器的，而对于Lexer我们可以用[JFlex](https://jflex.de/)，这也是官方推荐的做法，但这些东西放到这里讲有些超纲了，我感觉我能力不够，它们是属于编译原理中的知识。如果感兴趣的人多的话，今后准备充分的时候我会写一个系列。
+
+因为很多人也许根本就不会真正地去开发一门新的语言，而是基于已经存在的语言制作插件来优化编码，真正能开发一门新语言的人也不会听我在这跟他讲BNF，所以本段落点到为止，只是提一下IDEA支持这个功能，不会展开讲，感兴趣的同学可以[参考jetbrains的文档](http://www.jetbrains.org/intellij/sdk/docs/tutorials/custom_language_support/grammar_and_parser.html)，以及与编译原理相关的书籍。
+
+关于编译原理的相关书籍，那本黑皮的编译原理我就不推荐了，买了块🧱当枕头垫真的没啥意思。很多大佬说这书🐂🍺，但反正我是没看懂（书里的概念都是对的，但基本不说人话）。
+
+如果你真的想自己搞一门编程语言，让我给你推荐一本书的话，我会给你推荐一个叫**前桥和弥**的🇯🇵大佬写的[《自制编程语言》](https://book.douban.com/subject/25735333/)，该书在豆瓣上有**7.9**的高分，这本书是我大二的时候看的，是让我觉得自己真正对编译原理开始有点概念了的书。它最后会教你整出一个阉割版的Java，还是有的小复杂的，有兴趣的同学可以关注一下。
+
+在这里提一下Gbox，它算是比较讨巧的那种，因为它说白了就是xml，所以避开了词法分析和解析。
+
+Gbox的FileType是这样的，为Gbox所编写的插件其实也只是为了扩展特殊xml在IDEA中的功能：
+
+```kotlin
+object FlexmlFileType : XmlLikeFileType(XMLLanguage.INSTANCE) {
+
+    override fun getIcon(): Icon = fileIcon
+
+    override fun getName(): String = "flexml dsl"
+
+    override fun getDefaultExtension(): String = "flexml"
+
+    override fun getDescription(): String = "flexml style dsl file"
+}
+```
 
 ## 7 代码补全
 
@@ -349,9 +411,9 @@ Gbox使用了XmlTagNameProvider来简化工作
 
 
 
-### 8.3 Gbox是怎样才能做到在真机上实时预览呢？
+### 8.3 Gbox是怎样做到在真机上实时预览呢？
 
-尝试用过Gbox的同学一定知道，Gbox的一个核心特性就是能够在真机上实时预览。
+尝试玩过Gbox的同学一定知道，Gbox的一个核心特性就是能够在真机上实时预览。
 
 在同一网络环境中，通过使用Mock App扫描Studio提供的二维码，就可以在真机上实时预览布局。
 
@@ -363,9 +425,7 @@ Gbox使用了XmlTagNameProvider来简化工作
 
 ![新二维码图片]()
 
-这个窗口的原理很简单，其实就是管理了一个JFrame的生命周期罢了，二维码是用Google的zxing生成的，然后搞了一个awt的BuffedImage渲染上去，纯属调API操作，所以我就直接贴代码了：
-
-**PS**：说句题外话，看到这里也许有同学会震惊，IDEA这么好用的东西居然是垃圾swing写的？其实我的好几个写Java的朋友都一直以为IDEA这么好用的东西一定是C++写的，当我告诉他们IDEA是swing写的时候，他们无一例外的都感到不可思议，感觉就像是什么美好的东西美好的东西破灭了一样......
+原理很简单，因为IDEA本身就是swing写的，有Java的图形环境，所以直接弹出一个JFrame就完事了。二维码是用Google的zxing生成的，然后搞了一个awt的BuffedImage渲染上去，纯属调API操作，所以我就直接贴代码了：
 
 [src/main/kotlin/com/guet/flexbox/handshake/mock/QrCodeForm.kt](https://github.com/sanyuankexie/handshake/blob/master/src/main/kotlin/com/guet/flexbox/handshake/mock/QrCodeForm.kt)
 
@@ -451,7 +511,11 @@ class QrCodeForm(url: String) : JFrame() {
 }
 ```
 
-嗯？怎么说了这么多还是没说到怎么实时在真机上预览布局呢？别着急，秘密就藏在这个二维码里。这个二维码实际上是一个http协议的url，当你点击运行按钮加载运行生成运行配置的时候，实际上使用电脑开启了一个http服务器，这个url就是`http://<你的局域网IP>:<端口号默认8080>`。当使用Mock App扫描这个二维码之后，App获取到url，就可以通过请求每秒向电脑发送http请求，将最新的布局文件和数据拉下来，然后在真机上重新渲染，这样就实现了实时预览。
+**PS**：说句题外话，看到这里也许有同学会震惊，IDEA这么好用的东西居然是垃圾swing写的？其实我的好几个写Java的朋友都一直以为IDEA这么好用的东西一定是C++写的，当我告诉他们IDEA是swing写的时候，他们无一例外的都感到不可思议，感觉就像是什么美好的东西美好的东西破灭了一样......
+
+嗯？怎么说了这么多还是没说到怎么实时在真机上预览布局呢？别着急，秘密就藏在这个二维码里。
+
+这个二维码实际上是一个http协议的url，当你点击运行按钮加载运行生成运行配置的时候，实际上使用电脑开启了一个http服务器，这个url就是`http://<你的局域网IP>:<端口号默认8080>`。当使用Mock App扫描这个二维码之后，App获取到url，就可以通过请求每秒向电脑发送http请求，将最新的布局文件和数据拉下来，然后在真机上重新渲染，这样就实现了实时预览。
 
 ![]()
 
@@ -463,7 +527,7 @@ class QrCodeForm(url: String) : JFrame() {
 
 没错！这里我违背了jetbrains的推荐做法，没有把mock服务器和窗口放在一个独立的外部进程中去运行！至于为什么要这么做，我可以光明正大地告诉你纯粹是为了偷懒、为了方便、为了能用就行！但其实也不是，因为开启mock服务器这个程序实在是太轻量级了，而且又和插件密不可分，所以把它们打包，并且在一起运行在同一进程，才是最好地选择，并不全是因为我是一条懒狗。
 
-**PS**：但是不建议大家这么做啊，特别是当你要运行的调试程序本来就是一个外置程序的时候，不建议大家把代码内置，而应该使用类似继承`BaseProcessHandler`之类ProcessHandler来启动外部程序。
+**PS**：但是不建议大家这么做啊，特别是当你要运行的调试程序本来就是一个外置程序的时候，不建议大家把代码内置，而应该继承了类似`BaseProcessHandler`之类ProcessHandler来启动外部程序。
 
 ## 9 常用类和注意事项
 
@@ -504,10 +568,12 @@ class QrCodeForm(url: String) : JFrame() {
 
 ![]()
 
-当然Gbox的插件还有很多不足，例如由于我对openapi的研究有限，现在还没法实现attributeValue中的智能补全，待今后继续研究之后，会慢慢加上。
+当然Gbox的插件还有很多不足，由于我对openapi的研究有限，现在还没法实现attributeValue中的智能补全，待今后继续研究之后，会慢慢加上。
 
 ### 10.2 本文参考资料
-国内涉及插件开发的文章非常稀有，而且由于openapi的源码是几乎没有任何注释的，导致很多时候明知道某个功能能实现但却不知道怎么写就非常蛋疼。自己在开发的时候参考了阿里前辈moxun（有`xxx@apache.org`邮箱的大佬）开发的weex的IDEA插件以及读了不知道多少IDEA的源码之后才不怎么顺利的开发出来（但其实也就花了三四天的样子，openapi代码质量很高，但很多源码没注释没文档就是感觉恶心）。
+国内涉及插件开发的文章非常稀有，而且由于openapi的源码是几乎没有任何注释的，导致很多时候明知道某个功能能实现但却不知道怎么写就非常蛋疼（你在IDEA里看到过的功能openapi都能实现）。
+
+自己在开发的时候参考了阿里前辈moxun（有`xxx@apache.org`邮箱的大佬）开发的weex的IDEA插件以及读了不知道多少IDEA的源码之后才不怎么顺利的开发出来（但其实也就花了三四天的样子，openapi代码质量很高，但很多源码没注释没文档就是感觉恶心）。
 
 下面本编文章和插件开发中的是主要的参考资料。
 
