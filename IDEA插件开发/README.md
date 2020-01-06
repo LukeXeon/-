@@ -151,9 +151,17 @@ val attr: XmlAttribute = PsiTreeUtil.getParentOfType(position, XmlAttribute::cla
 
 ### 4.3 怎么创建Psi？
 
-那么如果我们像主动创建Psi文件该怎么弄呢？我们可以使用`PsiFileFactory.getInstance()`，然后调用`createFileFromText`从文本创建PsiFile，创建完之后，我们还要找一个PsiDictionary调用它的add把新的PsiFile添加进去。下文我们将编写创建文件的Action，也要用到这些API。
+那么如果我们像主动创建Psi文件该怎么弄呢？我们可以使用`PsiFileFactory.getInstance()`，然后调用`createFileFromText`从文本创建PsiFile，创建完之后，我们还要找一个PsiDictionary调用它的add把新的PsiFile添加进去。下文我们将编写创建文件的Action，会在哪里介绍这些API。
 
 ### 4.4 怎么修改Psi？
+
+先说个大前提，我们在执行修改Psi操作的时候，一定要用`WriteCommandAction.runWriteCommandAction`包起来，否则修改会失败，然后你会看到IDEA的右下角出现一个红色的❗️，点开它就会看到报错堆栈。
+
+```kotlin
+WriteCommandAction.runWriteCommandAction(project) {
+  	//TODO......
+}
+```
 
 所有的Psi都扩展自PsiElement接口，PsiElement接口最基本的修改方法有：
 
@@ -167,7 +175,7 @@ val attr: XmlAttribute = PsiTreeUtil.getParentOfType(position, XmlAttribute::cla
 * XmlTag，提供了`setAttribute()`和`getAttribute()`方法。
 * XmlTag，提供了添加子tag的方法`createChildTag()`
 
-对于Java的Psi，能做的事情太多，所以这里我只举几个典型例子
+对于Java的Psi，能做的事情太多，所以这里我只举几个典型例子：
 
 * 改包名
 
@@ -175,22 +183,65 @@ val attr: XmlAttribute = PsiTreeUtil.getParentOfType(position, XmlAttribute::cla
 psiJavaElement.getContainingFile().setPackageName(packageName)
 ```
 
-* 导入类，也就是`import`语句
+* `import`语句
+
+```kotlin
+        val searchScope = GlobalSearchScope.allScope(project)
+        val psiClass = PsiShortNamesCache.getInstance(project).getClassesByName("YourClassName", searchScope).first()
+        //想办法找到你想要找的类，这里只是举个例子
+        val psiElementFactory = ServiceManager.getService(project, PsiElementFactory::class.java) as PsiElementFactory
+        //PsiElementFactory是一个注册的ProjectService，我们从这里获取它
+        val importStatement = psiElementFactory.createImportStatement(psiClass)
+        //创建导入语句
+        psiJavaFile.importList?.add(importStatement)
+```
+
+至于ProjectService，使用`ServiceManager.getService()`来获取，它是可以让我们自己编写和注册的。就比如我们上面用到的PsiElementFactory，就是一个ProjectService，我们可以用`ServiceManager`来拿到它，也可以用`JavaPsiFacade.getInstance(project).elementFactory`获取，它是在JavaPsiPlugin.xml这个配置文件中被注册的。有关ProjectService的更多资料可以去看[这里](http://www.jetbrains.org/intellij/sdk/docs/basics/plugin_structure/plugin_services.html?search=Service)。
+
+```xml
+    <projectService serviceInterface="com.intellij.psi.PsiElementFactory"
+                    serviceImplementation="com.intellij.psi.impl.PsiElementFactoryImpl"/>
+```
+
 * 实现接口
+
+这里我们需要创建PsiJavaCodeReferenceElement来引用Java接口类型，接着我们创建的PsiJavaCodeReferenceElement添加到PsiClass实例中去。
+
+```kotlin
+val interfaceRef : PsiJavaCodeReferenceElement = psiElementFactory.createClassReferenceElement(interfacePsiClass)
+psiClass.implementsList?.add(interfaceRef)
+```
+
+修改extends与implements大同小异，这里不再赘述。
+
 * 加字段
-* 加方法
 
-【。。。。】
+```kotlin
+        //法一
+        val factory: PsiElementFactory = JavaPsiFacade.getInstance(project).elementFactory
+        val field: PsiField = factory.createFieldFromText("public int a = 0;", psiClass)
+        //法二
+        val factory = JavaPsiFacade.getInstance(project).elementFactory
+        val field = factory.createField("a", PsiType.INT)
+        field.modifierList?.setModifierProperty(PsiModifier.PUBLIC, true)
+        psiClass.add(field)   
+```
 
-每种语言的API差异很大，如果你在开发相关插件，那就可能需要你读一下源码了，本文只能是介绍一下，说一些官方Doc里没有的东西，告诉你Psi大概是个什么东西。
+加方法的操作与加字段类似，读者可以自行照葫芦画瓢，这里不再赘述。接下来我们还需要格式化一下代码，让修改的结果看起来就像正常写出来的一样。
 
-如果你要在其他地方修改Psi时收到通知，用`PsiManager.getInstance().addPsiTreeChangeListener()`，上面有多个回调，但是我们通常不需要实现那么多的回调，所以openapi提供了一个类`PsiTreeChangeAdapter`，我们使用它就好了。
+```kotlin
+CodeStyleManager.getInstance(directory.project).reformat(psiFile)
+```
+
+好了，至此Psi讲得差不多了，也许读者也发现了，每种语言的Psi API差异很大。如果你在开发相关插件，那就可能需要你读一下源码了。本文只能是介绍一下，说一些官方Doc里没有的东西，告诉你Psi大概是个什么东西和这玩意大概怎么用。
+
+如果你要在修改Psi时收到通知，用`PsiManager.getInstance().addPsiTreeChangeListener()`，上面有多个回调，但是我们通常不需要实现那么多的回调，所以openapi提供了一个类`PsiTreeChangeAdapter`，我们使用它就好了。
 
 ### 4.5 什么是VFS？
 
 VFS就是虚拟文件系统，与Psi不同，它是和Project无关的，所以`VirtualFileManager.getInstance()`不需要Project作为参数，它的VirtualFile更接近我们对一般文件的理解，它可以`getOutputStream()`和`getInputStream()`来对文件进行直接彻底的修改和读取，这都是Psi做不到的。
 
-VFS还有一个功能就是读取外部文件。
+VFS还有一个作用就是读取外部文件。
 
 【。。。。】
 
@@ -210,7 +261,7 @@ VFS还有一个功能就是读取外部文件。
 
 ![](./assets/16f50376820d5289.png)
 
-在代码中右键的时候打开的菜单，也是一组Action，并且你还能拿到该处的Psi。
+在代码中右键的时候打开的菜单，也是一组Action，并且你还能拿到该处的Psi（光标选中的地方有Psi才能拿到Psi，否则只会拿到null）。
 
 <img src="assets/截屏2020-01-06上午12.58.07.png" alt="截屏2020-01-06上午12.58.07" style="zoom:50%;" />
 
@@ -405,19 +456,7 @@ object SimpleFileType : LanguageFileType(SimpleLanguage) {
 
 ![](assets/file_type_factory.png)
 
-### 6.2 语法和词法的解析
-
-熟悉编译原理的同学一定都知道yacc、flex、lexer、bnf之类的名词。
-
-但是很多人也许根本就不会真正地去开发一门新的语言，而是基于已经存在的语言制作插件来优化编码，真正能开发一门新语言的人也不会听我在这跟他讲BNF，这些东西放到这里讲我感觉有些超纲了，它们是属于编译原理中的知识，我自知我能力我不够，并且准备还不充分，所以就不在这误人子弟了，本段落点到为止，只是提一下IDEA支持这个功能，不会展开讲。
-
-IDEA是支持从BNF（巴科斯范式）来生成语法解析器的，而对于Lexer我们可以用[JFlex](https://jflex.de/)，这也是官方推荐的做法。感兴趣的同学可以[参考jetbrains的文档](http://www.jetbrains.org/intellij/sdk/docs/tutorials/custom_language_support/grammar_and_parser.html)，以及与编译原理相关的书籍。
-
-关于编译原理的相关书籍，那本黑皮的编译原理我就不推荐了，买了块🧱当枕头垫真的没啥意思。很多大佬说这书🐂🍺，但反正我是没看懂（书里的概念都是对的，但基本不说人话）。
-
-如果你真的想自己搞一门编程语言，让我给你推荐一本书的话，我会给你推荐一个叫**前桥和弥**的🇯🇵大佬写的[《自制编程语言》](https://book.douban.com/subject/25735333/)，该书在豆瓣上有**7.9**的高分，这本书是我大二的时候看的，是让我觉得自己真正对编译原理开始有点概念了的书。它最后会教你整出一个阉割版的Java+阉割版JVM，还是有点小复杂的，有兴趣的同学可以关注一下。
-
-在这里提一下Gbox，它算是比较讨巧的那种，因为它说白了就是xml，所以避开了词法分析和解析。Gbox的FileType是这样的，为Gbox所编写的插件其实也只是为了扩展特殊xml在IDEA中的功能：
+在这里提一下Gbox，也算是给大家一种其他的思路，它算是比较讨巧的那种，因为它说白了就是xml，所以不需要编写额外的词法分析和解析的代码，所以Gbox的FileType是这样的：
 
 ```kotlin
 object FlexmlFileType : XmlLikeFileType(XMLLanguage.INSTANCE) {
@@ -431,6 +470,18 @@ object FlexmlFileType : XmlLikeFileType(XMLLanguage.INSTANCE) {
     override fun getDescription(): String = "flexml style dsl file"
 }
 ```
+
+### 6.2 语法和词法的解析
+
+熟悉编译原理的同学一定都知道yacc、flex、lexer、bnf之类的名词。
+
+但是很多人也许根本就不会真正地去开发一门新的语言，而是基于已经存在的语言制作插件来优化编码，真正能开发一门新语言的人也不会听我在这跟他讲BNF，这些东西放到这里讲我感觉有些超纲了，它们是属于编译原理中的知识，我自知我能力我不够，并且准备还不充分，所以就不在这误人子弟了，本段落点到为止，只是提一下IDEA支持这个功能，不会展开讲。
+
+IDEA是支持从BNF（巴科斯范式）来生成语法解析器的，而对于Lexer我们可以用[JFlex](https://jflex.de/)，这也是官方推荐的做法。感兴趣的同学可以[参考jetbrains的文档](http://www.jetbrains.org/intellij/sdk/docs/tutorials/custom_language_support/grammar_and_parser.html)，以及与编译原理相关的书籍。
+
+关于编译原理的相关书籍，那本黑皮的编译原理我就不推荐了，买了块🧱当枕头垫真的没啥意思。很多大佬说这书🐂🍺，但反正我是没看懂（书里的概念都是对的，但基本不说人话）。
+
+如果你真的想自己搞一门编程语言，让我给你推荐一本书的话，我会给你推荐一个叫**前桥和弥**的🇯🇵大佬写的[《自制编程语言》](https://book.douban.com/subject/25735333/)，该书在豆瓣上有**7.9**的高分，这本书是我大二的时候看的，是让我觉得自己真正对编译原理开始有点概念了的书。它最后会教你整出一个阉割版的Java+阉割版JVM，还是有点小复杂的，有兴趣的同学可以关注一下。
 
 ## 7 代码补全
 
@@ -558,7 +609,7 @@ class QrCodeForm(url: String) : JFrame() {
 
 这个二维码实际上是一个http协议的url，当你点击运行按钮加载运行生成运行配置的时候，实际上使用电脑开启了一个http服务器，这个url就是`http://<你的局域网IP>:<端口号默认8080>`。当使用Mock App扫描这个二维码之后，App获取到url，就可以通过请求每秒向电脑发送http请求，将最新的布局文件和数据拉下来，然后在真机上重新渲染，这样就实现了实时预览。
 
-![未命名文件](assets/未命名文件.png)
+<img src="assets/截屏2020-01-06下午9.35.27.png" alt="截屏2020-01-06下午9.35.27" style="zoom:50%;" />
 
 现在接着上面没讲完的RunProfileState现在我们要来实现它，用ProcessHandler来管理上面的QrCodeForm。
 
@@ -568,7 +619,7 @@ class QrCodeForm(url: String) : JFrame() {
 
 没错！这里我违背了jetbrains的推荐做法，没有把mock服务器和窗口放在一个独立的外部进程中去运行！至于为什么要这么做，我可以光明正大地告诉你纯粹是为了偷懒、为了方便、为了能用就行！但其实也不是，因为开启mock服务器这个程序实在是太轻量级了，而且又和插件密不可分，所以把它们打包，并且在一起运行在同一进程，才是最好地选择，并不全是因为我是一条懒狗。
 
-**PS**：但是不建议大家这么做啊，特别是当你要运行的调试程序本来就是一个外置程序的时候，不建议大家把代码内置，而应该继承了类似`BaseProcessHandler`之类ProcessHandler来启动外部程序。
+**PS**：但是真的不建议大家这么做啊，特别是当你要运行的调试程序本来就是一个外置程序的时候，不建议大家把代码内置，而应该继承了类似`BaseProcessHandler`之类ProcessHandler来启动外部程序。
 
 ## 9 其他内容
 
@@ -578,11 +629,10 @@ Gbox其实在这方面做得是不完整的。
 
 ### 9.2 openapi中的常用类和方法
 
-* 共用线程池
-
-* PsiTreeUtil
-
-* 各种Manager，VirtualFileManager
+* `AppExecutorUtil.getAppExecutorService() ` 共用线程池
+* `PsiTreeUtil` 之前介绍过，用来更方便的从Psi🌲中获取数据
+* `UIUtil.createImage` 创建图片
+* 各种Manager：`VirtualFileManager`虚拟文件相关的API，
 
 ### 9.3 注意事项
 
@@ -618,7 +668,7 @@ Gbox其实在这方面做得是不完整的。
 ### 10.2 本文参考资料
 国内涉及插件开发的文章非常稀有，而且由于openapi的源码是几乎没有任何注释的，导致很多时候明知道某个功能能实现但却不知道怎么写就非常蛋疼（你在IDEA里看到过的功能openapi都能实现）。
 
-自己在开发的时候参考了阿里前辈moxun（有`xxx@apache.org`邮箱的大佬）开发的weex的IDEA插件以及读了不知道多少IDEA的源码之后才不怎么顺利的开发出来（但其实也就花了三四天的样子，openapi代码质量很高，但很多源码没注释没文档就是感觉恶心）。
+自己在开发的时候发现了阿里前辈[moxun](https://github.com/misakuo)写的相关文章（有`xxx@apache.org`邮箱的大佬，👀到他github上用的是炮姐的👤头像，他也是二刺螈？👴❤️了！），在参考了moxun大神开发的weex的IDEA插件后，自己又读了不知道多少IDEA的源码之后才不怎么顺利的开发出来（但其实也就花了三四天的样子，openapi代码质量很高，但很多源码没注释没文档就是感觉恶心）。
 
 下面本编文章和插件开发中的是主要的参考资料。
 
