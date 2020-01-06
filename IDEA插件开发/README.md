@@ -8,7 +8,7 @@
 
 编写插件总的来说还是为了方便我们程序员自己的，当我们需要IDEA为我们支持更多的语言或者集成更多的开发环境的时候，就需要借助IntelliJ平台的openapi来开发插件。
 
-当然我也不是无缘无故地去学习插件开发，我为[Gbox](https://github.com/sanyuankexie/Gbox)开发了IDEA（Android Studio）的DSL插件支持插件[handshake](https://github.com/sanyuankexie/handshake)，本文也主要围绕handshake的几个主要功能来对插件开发进行介绍，大概的功能有这些：
+当然我也不是无缘无故地去学习插件开发，我为[Gbox](https://github.com/sanyuankexie/Gbox)开发了IDEA（Android Studio）的DSL插件支持插件[handshake](https://github.com/sanyuankexie/handshake)，本文也主要围绕handshake的几个主要功能来对插件开发进行介绍，本文至少能带你实现以下功能（包括但不限于，因为修改Psi那部分可发挥的空间很大，能做多少完全取决于你的想象力）：
 
 * 编译布局DSL
 * 调试Mock布局DSL，并且做到在真机上实时预览
@@ -17,7 +17,6 @@
 * 在为IDEA添加自定义Action
 * 实现类似Java自动识别main函数一样在代码旁边就有一个运行的小箭头来执行这个文件
 
-如果你能耐心读完这篇文章，你也能轻松掌握上面所提到的这些技术。
 ## 3 新建IDEA插件项目
 这里我建议选择的Gradle来进行开发，这样集成依赖会非常方便。记得一定要在右边勾选Interllij Platform Plugin和Java，如果想用Kotlin进行开发，下面的kotlin/JVM也要勾上（如果你跟着本文走的话，建议勾上）。
 
@@ -114,6 +113,42 @@ PsiElement是用**双向链表**的方式来组织其子节点（子树的），
 
 当然，我们也可以通过任意一个PsiFile的子节点（比如XmlTag），在其上调用`psiElement.getContainingFile()`获取其PsiFile。
 
+一般来说我们编写的插件都是跟Java有关的，openapi中提供了一些快速获取Java Psi的工具类：
+
+* `PsiShortNamesCache.getInstance().getClassesByName()`通过一个短名称（例如LogUtil）查找类
+* `JavaPsiFacade.findClass()`按类名找类
+* `JavaPsiFacade.getInstance().findPackage()`找包
+
+* `PsiClass.getSuperClass()`查找一个类的直接父类
+* `ClassInheritorsSearch.search()`找子类
+* `OverridingMethodsSearch.search()`查找被特定方法重写的方法
+
+而对于Xml来说，我们一般不关心XmlToken，而关心的是XmlTag、XmlAttribute之类的**大对象**，用遍历树来获取这些对象太麻烦了，所以openapi中还有一个工具类`PsiTreeUtil`：
+
+* 获取父级XmlAttribute
+
+```kotlin
+val attr: XmlAttribute = PsiTreeUtil.getParentOfType(position, XmlAttribute::class.java)
+```
+
+* 或是使用`getChildOfType`获取指定类型的子节点
+
+```java
+  /**
+   * Non-recursive search for element of type T amongst given {@code element} children.
+   *
+   * @param element a PSI element to start search from.
+   * @param aClass  element type to search for.
+   * @param <T>     element type to search for.
+   * @return first found element, or null if nothing found.
+   */
+  @Nullable
+  @Contract("null, _ -> null")
+  public static <T extends PsiElement> T getChildOfType(@Nullable PsiElement element, @NotNull Class<T> aClass) {
+  //省略......
+  }
+```
+
 ### 4.3 怎么创建Psi？
 
 那么如果我们像主动创建Psi文件该怎么弄呢？我们可以使用`PsiFileFactory.getInstance()`，然后调用`createFileFromText`从文本创建PsiFile，创建完之后，我们还要找一个PsiDictionary调用它的add把新的PsiFile添加进去。下文我们将编写创建文件的Action，也要用到这些API。
@@ -128,20 +163,24 @@ PsiElement是用**双向链表**的方式来组织其子节点（子树的），
 
 对于Xml而言则提供了更多支持：
 
-* 比如对于XmlAttribute，提供了`getValue()`和`setValue()`方法。
-* 比如对于XmlTag提供了，提供了`setAttribute()`和`getAttribute()`方法。
+* XmlAttribute，提供了`getValue()`和`setValue()`方法。
+* XmlTag，提供了`setAttribute()`和`getAttribute()`方法。
+* XmlTag，提供了添加子tag的方法`createChildTag()`
 
 对于Java的Psi，能做的事情太多，所以这里我只举几个典型例子
 
-* 修改包名
+* 改包名
 
 ```kotlin
-psiJavaElement.getContainingFile().setPackageName(pkgName)
+psiJavaElement.getContainingFile().setPackageName(packageName)
 ```
 
-【。。。。。】
+* 导入类，也就是`import`语句
+* 实现接口
+* 加字段
+* 加方法
 
-
+【。。。。】
 
 每种语言的API差异很大，如果你在开发相关插件，那就可能需要你读一下源码了，本文只能是介绍一下，说一些官方Doc里没有的东西，告诉你Psi大概是个什么东西。
 
@@ -150,6 +189,10 @@ psiJavaElement.getContainingFile().setPackageName(pkgName)
 ### 4.5 什么是VFS？
 
 VFS就是虚拟文件系统，与Psi不同，它是和Project无关的，所以`VirtualFileManager.getInstance()`不需要Project作为参数，它的VirtualFile更接近我们对一般文件的理解，它可以`getOutputStream()`和`getInputStream()`来对文件进行直接彻底的修改和读取，这都是Psi做不到的。
+
+VFS还有一个功能就是读取外部文件。
+
+【。。。。】
 
 ### 4.6 PSI与VFS的区别
 
@@ -366,17 +409,15 @@ object SimpleFileType : LanguageFileType(SimpleLanguage) {
 
 熟悉编译原理的同学一定都知道yacc、flex、lexer、bnf之类的名词。
 
-IDEA是支持从BNF（巴科斯范式）来生成语法解析器的，而对于Lexer我们可以用[JFlex](https://jflex.de/)，这也是官方推荐的做法，但这些东西放到这里讲有些超纲了，我感觉我能力不够，它们是属于编译原理中的知识。如果感兴趣的人多的话，今后准备充分的时候我会写一个系列。
+但是很多人也许根本就不会真正地去开发一门新的语言，而是基于已经存在的语言制作插件来优化编码，真正能开发一门新语言的人也不会听我在这跟他讲BNF，这些东西放到这里讲我感觉有些超纲了，它们是属于编译原理中的知识，我自知我能力我不够，并且准备还不充分，所以就不在这误人子弟了，本段落点到为止，只是提一下IDEA支持这个功能，不会展开讲。
 
-因为很多人也许根本就不会真正地去开发一门新的语言，而是基于已经存在的语言制作插件来优化编码，真正能开发一门新语言的人也不会听我在这跟他讲BNF，所以本段落点到为止，只是提一下IDEA支持这个功能，不会展开讲，感兴趣的同学可以[参考jetbrains的文档](http://www.jetbrains.org/intellij/sdk/docs/tutorials/custom_language_support/grammar_and_parser.html)，以及与编译原理相关的书籍。
+IDEA是支持从BNF（巴科斯范式）来生成语法解析器的，而对于Lexer我们可以用[JFlex](https://jflex.de/)，这也是官方推荐的做法。感兴趣的同学可以[参考jetbrains的文档](http://www.jetbrains.org/intellij/sdk/docs/tutorials/custom_language_support/grammar_and_parser.html)，以及与编译原理相关的书籍。
 
 关于编译原理的相关书籍，那本黑皮的编译原理我就不推荐了，买了块🧱当枕头垫真的没啥意思。很多大佬说这书🐂🍺，但反正我是没看懂（书里的概念都是对的，但基本不说人话）。
 
-如果你真的想自己搞一门编程语言，让我给你推荐一本书的话，我会给你推荐一个叫**前桥和弥**的🇯🇵大佬写的[《自制编程语言》](https://book.douban.com/subject/25735333/)，该书在豆瓣上有**7.9**的高分，这本书是我大二的时候看的，是让我觉得自己真正对编译原理开始有点概念了的书。它最后会教你整出一个阉割版的Java，还是有的小复杂的，有兴趣的同学可以关注一下。
+如果你真的想自己搞一门编程语言，让我给你推荐一本书的话，我会给你推荐一个叫**前桥和弥**的🇯🇵大佬写的[《自制编程语言》](https://book.douban.com/subject/25735333/)，该书在豆瓣上有**7.9**的高分，这本书是我大二的时候看的，是让我觉得自己真正对编译原理开始有点概念了的书。它最后会教你整出一个阉割版的Java+阉割版JVM，还是有点小复杂的，有兴趣的同学可以关注一下。
 
-在这里提一下Gbox，它算是比较讨巧的那种，因为它说白了就是xml，所以避开了词法分析和解析。
-
-Gbox的FileType是这样的，为Gbox所编写的插件其实也只是为了扩展特殊xml在IDEA中的功能：
+在这里提一下Gbox，它算是比较讨巧的那种，因为它说白了就是xml，所以避开了词法分析和解析。Gbox的FileType是这样的，为Gbox所编写的插件其实也只是为了扩展特殊xml在IDEA中的功能：
 
 ```kotlin
 object FlexmlFileType : XmlLikeFileType(XMLLanguage.INSTANCE) {
@@ -529,9 +570,13 @@ class QrCodeForm(url: String) : JFrame() {
 
 **PS**：但是不建议大家这么做啊，特别是当你要运行的调试程序本来就是一个外置程序的时候，不建议大家把代码内置，而应该继承了类似`BaseProcessHandler`之类ProcessHandler来启动外部程序。
 
-## 9 常用类和注意事项
+## 9 其他内容
 
-### 9.1 openapi中的常用类和方法
+### 9.1 还可以做哪些事情？
+
+Gbox其实在这方面做得是不完整的。
+
+### 9.2 openapi中的常用类和方法
 
 * 共用线程池
 
@@ -539,7 +584,7 @@ class QrCodeForm(url: String) : JFrame() {
 
 * 各种Manager，VirtualFileManager
 
-### 9.2 其他注意事项
+### 9.3 注意事项
 
 * 插件使用独立的ClassLoader进行加载，所以你在依赖openapi的其他模块的时候一定要记得在plugin.xml中声明依赖，否则会在运行时报找不到类，下面是handshake的依赖。
 
@@ -568,7 +613,7 @@ class QrCodeForm(url: String) : JFrame() {
 
 ![]()
 
-当然Gbox的插件还有很多不足，由于我对openapi的研究有限，现在还没法实现attributeValue中的智能补全，待今后继续研究之后，会慢慢加上。
+当然Gbox的插件还有很多不足，由于我对openapi的研究有限，插件虽然能用了但还不够强大，待今后继续研究之后，会慢慢加上，也希望能够得到其他大佬的指点。
 
 ### 10.2 本文参考资料
 国内涉及插件开发的文章非常稀有，而且由于openapi的源码是几乎没有任何注释的，导致很多时候明知道某个功能能实现但却不知道怎么写就非常蛋疼（你在IDEA里看到过的功能openapi都能实现）。
