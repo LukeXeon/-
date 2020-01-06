@@ -517,91 +517,9 @@ Gbox使用了XmlTagNameProvider来简化工作
 
 ![新二维码图片]()
 
-原理很简单，因为IDEA本身就是swing写的，有Java的图形环境，所以直接弹出一个JFrame就完事了。二维码是用Google的zxing生成的，然后搞了一个awt的BuffedImage渲染上去，纯属调API操作，所以我就直接贴代码了：
+原理很简单，因为IDEA本身就是swing写的，有Java的图形环境，所以直接弹出一个JFrame就完事了。二维码是用Google的zxing生成的，然后搞了一个awt的BuffedImage渲染上去，纯属调API操作，但是代码有点多，我挂在github上了，感兴趣的同学可以自己点开来看：
 
 [src/main/kotlin/com/guet/flexbox/handshake/mock/QrCodeForm.kt](https://github.com/sanyuankexie/handshake/blob/master/src/main/kotlin/com/guet/flexbox/handshake/mock/QrCodeForm.kt)
-
-```kotlin
-class QrCodeForm(url: String) : JFrame() {
-
-    init {
-        iconImage = IconUtil.toImage(fileIcon)
-        val size = 300
-        title = "For playground"
-        defaultCloseOperation = DISPOSE_ON_CLOSE
-        setSize(size, size)
-        isResizable = false
-        val content = contentPane
-        val panel = ImageView()
-        AppExecutorUtil.getAppExecutorService().execute {
-            val image = generateQR(url, size)//异步生成图片
-            EventQueue.invokeLater {
-                panel.image = image//发回主线程
-            }
-        }
-        panel.setSize(size, size)
-        content.add(panel)
-        val kit = Toolkit.getDefaultToolkit() //定义工具包
-        val screenSize = kit.screenSize //获取屏幕的尺寸
-        val screenWidth = screenSize.width //获取屏幕的宽
-        val screenHeight = screenSize.height //获取屏幕的高
-        setLocation(screenWidth / 2 - size / 2, screenHeight / 2 - size / 2)//设置窗口居中显示
-        isVisible = true
-        isAlwaysOnTop = true
-        val cancel = object : WeakReference<JFrame>(this), Runnable {
-            override fun run() {
-                get()?.isAlwaysOnTop = false
-            }
-        }
-        AppExecutorUtil.getAppScheduledExecutorService().schedule({
-            EventQueue.invokeLater(cancel)
-        }, 100, TimeUnit.MILLISECONDS)
-    }
-
-
-    companion object {
-        /**
-         * Generating a qr code with provided content
-         *
-         * @param content The content that should be in the QR
-         * @return An Buffered image object containing the qr code
-         */
-        private fun generateQR(content: String, size: Int): BufferedImage {
-            try {
-
-                val hintMap = HashMap<EncodeHintType, ErrorCorrectionLevel>()
-                hintMap[EncodeHintType.ERROR_CORRECTION] = ErrorCorrectionLevel.L
-                val qrCodeWriter = QRCodeWriter()
-                val byteMatrix = qrCodeWriter.encode(
-                    content,
-                    BarcodeFormat.QR_CODE, size, size, hintMap
-                )
-                val width = byteMatrix.width
-                val image = UIUtil.createImage(
-                    width,
-                    width,
-                    BufferedImage.TYPE_INT_RGB
-                )
-                val graphics = image.createGraphics() as Graphics2D
-                graphics.color = JBColor.WHITE
-                graphics.fillRect(0, 0, width, width)//先全部涂白
-                graphics.color = JBColor.BLACK
-
-                for (i in 0 until width) {
-                    for (j in 0 until width) {
-                        if (byteMatrix.get(i, j)) {
-                            graphics.fillRect(i, j, 1, 1)//为true的涂一个小黑方块
-                        }
-                    }
-                }
-                return image
-            } catch (e: WriterException) {
-                throw RuntimeException(e)
-            }
-        }
-    }
-}
-```
 
 **PS**：说句题外话，看到这里也许有同学会震惊，IDEA这么好用的东西居然是垃圾swing写的？其实我的好几个写Java的朋友都一直以为IDEA这么好用的东西一定是C++写的，当我告诉他们IDEA是swing写的时候，他们无一例外的都感到不可思议，感觉就像是什么美好的东西美好的东西破灭了一样......
 
