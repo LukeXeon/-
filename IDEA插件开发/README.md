@@ -241,10 +241,6 @@ CodeStyleManager.getInstance(directory.project).reformat(psiFile)
 
 VFS就是虚拟文件系统，与Psi不同，它是和Project无关的，所以`VirtualFileManager.getInstance()`不需要Project作为参数，它的VirtualFile更接近我们对一般文件的理解，它可以`getOutputStream()`和`getInputStream()`来对文件进行直接彻底的修改和读取，这都是Psi做不到的。
 
-VFS还有一个作用就是读取外部文件。
-
-【。。。。】
-
 ### 4.6 PSI与VFS的区别
 
 要说PSI和VFS的区别的话，我个人理解PSI是对源码的结构化读取和修改，而VFS就是对源码的非结构化读取和修改，两者在openapi中是可以直接相互转换的，VF和通过`PsiManager.getInstance().findFile()`转换为Psi，Psi也可以直接通过`getVirtualFile()`得到VF。
