@@ -233,7 +233,7 @@ psiClass.implementsList?.add(interfaceRef)
 CodeStyleManager.getInstance(directory.project).reformat(psiFile)
 ```
 
-好了，至此Psi讲得差不多了，也许读者也发现了，每种语言的Psi API差异很大。如果你在开发相关插件，那就可能需要你读一下源码了。本文只能是介绍一下，说一些官方Doc里没有的东西，告诉你Psi大概是个什么东西和这玩意大概怎么用。
+好了，至此Psi讲得差不多了，也许有些读者也发现了，每种语言的Psi API差异很大。如果你在开发相关插件，那就可能需要你读一下源码了，我肯定是讲不完的，本文只能是介绍一下，说一些官方Doc里没有的东西，告诉你Psi大概是个什么东西和这玩意大概怎么用。
 
 如果你要在修改Psi时收到通知，用`PsiManager.getInstance().addPsiTreeChangeListener()`，上面有多个回调，但是我们通常不需要实现那么多的回调，所以openapi提供了一个类`PsiTreeChangeAdapter`，我们使用它就好了。
 
@@ -668,7 +668,7 @@ Gbox其实在这方面做得是不完整的。
 ### 10.2 本文参考资料
 国内涉及插件开发的文章非常稀有，而且由于openapi的源码是几乎没有任何注释的，导致很多时候明知道某个功能能实现但却不知道怎么写就非常蛋疼（你在IDEA里看到过的功能openapi都能实现）。
 
-自己在开发的时候发现了阿里前辈[moxun](https://github.com/misakuo)写的相关文章（有`xxx@apache.org`邮箱的大佬，👀到他github上用的是炮姐的👤头像，他也是二刺螈？👴❤️了！），在参考了moxun大神开发的weex的IDEA插件后，自己又读了不知道多少IDEA的源码之后才不怎么顺利的开发出来（但其实也就花了三四天的样子，openapi代码质量很高，但很多源码没注释没文档就是感觉恶心）。
+自己在开发的时候发现了阿里前辈[moxun](https://github.com/misakuo)写的相关文章（有`xxx@apache.org`邮箱的大佬，👀到他github上用的是炮姐的👤头像，他也是二刺螈？👴❤️了！），在参考了moxun大神开发的weex的IDEA插件后，自己又读了不知道多少IDEA的源码才不怎么顺利的开发出来（但其实也就花了三四天的样子，openapi代码质量很高，但很多源码没注释没文档就是感觉恶心）。
 
 下面本编文章和插件开发中的是主要的参考资料。
 
