@@ -371,7 +371,7 @@ class NewFlexmlAction : CreateElementActionBase("", "", fileIcon)
 直接像下面这么写，你就创建了一种叫Simple新语言了。
 
 ```kotlin
-object SimpleLanguage:Language("Simple")
+object SimpleLanguage : Language("Simple")
 ```
 
 但是它现在还比较low，它一无所有，连自己文件的后缀名叫什么都不知道，所以我们还要告诉IDEA，这种语言的文件应该是怎么样的，所以我们要创建它的文件类型。还记得大明湖畔的fileIcon吗，就是我们之前在Action那加载的那个图标，它又派上用场了。
@@ -558,7 +558,7 @@ class QrCodeForm(url: String) : JFrame() {
 
 这个二维码实际上是一个http协议的url，当你点击运行按钮加载运行生成运行配置的时候，实际上使用电脑开启了一个http服务器，这个url就是`http://<你的局域网IP>:<端口号默认8080>`。当使用Mock App扫描这个二维码之后，App获取到url，就可以通过请求每秒向电脑发送http请求，将最新的布局文件和数据拉下来，然后在真机上重新渲染，这样就实现了实时预览。
 
-![]()
+![未命名文件](assets/未命名文件.png)
 
 现在接着上面没讲完的RunProfileState现在我们要来实现它，用ProcessHandler来管理上面的QrCodeForm。
 
