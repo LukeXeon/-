@@ -456,7 +456,7 @@ object SimpleFileType : LanguageFileType(SimpleLanguage) {
 
 ![](assets/file_type_factory.png)
 
-在这里提一下Gbox，也算是给大家一种其他的思路，它算是比较讨巧的那种，因为它说白了就是xml，不需要编写额外的词法分析和解析的代码，所以Gbox的FileType是这样的：
+在这里提一下Gbox，也算是给大家一种其他的思路，它算是比较讨巧的那种，因为它说白了就是xml，所以不需要编写额外的词法分析和解析的代码。所以Gbox的FileType是这样的，它使用的是后缀为`.flexml`的xml文件，并有特殊图标跟普通的xml文件进行区分：
 
 ```kotlin
 object FlexmlFileType : XmlLikeFileType(XMLLanguage.INSTANCE) {
@@ -613,21 +613,162 @@ ComponentConfiguration是我自己写的类，主要功能就是保存一些标�
 
 我们就能看到运行配置到底配置了啥，待会我们就要实现一个类似的。
 
-### 8.2 像识别java的mian函数一样识别我们的代码
+第一步，我们要自定义一种RunConfiguration。我们继承`LocatableConfigurationBase<T>`，该类型实现了RunConfiguration（至于为什么是继承它稍后会介绍）。
+
+```kotlin
+class FlexmlMockRunConfiguration(project: Project, factory: ConfigurationFactory) :
+    LocatableConfigurationBase<FlexmlMockRunConfigurationOptions>(project, factory, "Mock this package") {
+
+    override fun getConfigurationEditor(): SettingsEditor<out RunConfiguration> {
+      //TODO...
+    }
+
+    override fun getState(executor: Executor, environment: ExecutionEnvironment): RunProfileState? {
+        //TODO...
+    }
+
+    override fun getDefaultOptionsClass(): Class<out LocatableRunConfigurationOptions> {
+        return FlexmlMockRunConfigurationOptions::class.java
+    }
+}
+```
+
+你会注意到父类会要求一个泛型参数。因为Configuration本身不保存数据，所以这个泛型参数实际上是我们用来存数据的实现类，在上面的代码中这个类型是`FlexmlMockRunConfigurationOptions`，为此，我们还需要重写`getDefaultOptionsClass()`。
+
+下面就是我们用来存数据的`FlexmlMockRunConfigurationOptions`，它集成自LocatableRunConfigurationOptions。注意对于其上面的var变量，一定要像我这么写，这样才能保证openapi能够正确地帮我们自动完成数据的序列化和反序列化。
+
+```kotlin
+class FlexmlMockRunConfigurationOptions : LocatableRunConfigurationOptions() {
+
+    var port: Int by property(defaultValue = 8080)//端口号，默认8080
+
+    var dataSource: String? by string()//数据源的.json文件地址
+
+    var template: String? by string()//布局的.flexml文件地址
+}
+```
+
+现在还有两个方法是强制我们要实现的。一个是`getConfigurationEditor()`，决定了你在IDEA的配置面板中会看到那些输入框，就像上面的图中所显示的一样。一个`getState()`决定我们这玩意跑的是什么东西。现在，我们先来实现``getConfigurationEditor()`。
+
+使用IDEA创建swing的GUI Form。
+
+![截屏2020-01-07下午9.06.55](assets/截屏2020-01-07下午9.06.55.png)
+
+然后，你会得到两个文件。
+
+<img src="assets/截屏2020-01-07下午9.22.08.png" alt="截屏2020-01-07下午9.22.08" style="zoom:50%;" />
+
+点击`.form`文件，然后开始拖框框，顶层会有一个JPanel，建议使用`GridLayoutManager`，会比较容易拖出自己想要的效果。
+
+![截屏2020-01-07下午9.17.51](assets/截屏2020-01-07下午9.17.51.png)
+
+然后我们注意field name这个Property，修改这个会在java文件上生成对应的private字段，当然你在java中将字段改成public的，在下面的代码中我还为port添加了输入验证。
+
+但是你会发现，这些字段居然都没有初始化，难道不会抛出异常吗？当然不会，IDEA会根据你的`.form`文件对这个对象进行依赖注入，所以我们可以直接使用这些对象。
+
+```java
+public class FlexmlMockSettingForm {
+    public JPanel wrapPanel;
+    public JTextField port;
+    public JTextField template;
+    public JTextField dataSource;
+
+    public FlexmlMockSettingForm(){
+        port.setInputVerifier(new InputVerifier() {
+            @Override
+            public boolean verify(JComponent input) {
+                try {
+                    Integer.parseInt(port.getText());
+                    return true;
+                }catch (Exception e){
+                    return false;
+                }
+            }
+        });
+    }
+}
+```
+然后我们借助`FlexmlMockSettingForm`实现`getConfigurationEditor()`。
+
+```kotlin
+  override fun getConfigurationEditor(): SettingsEditor<out RunConfiguration> = FlexmlMockSettingsEditor()
+```
+
+state获取的就是我们编写的`FlexmlMockRunConfigurationOptions`。
+
+```kotlin
+class FlexmlMockSettingsEditor : SettingsEditor<FlexmlMockRunConfiguration>() {
+
+    private val form = FlexmlMockSettingForm()
+
+    override fun resetEditorFrom(s: FlexmlMockRunConfiguration) {
+        form.port.text = s.state?.port.toString()
+        form.dataSource.text = s.state?.dataSource
+        form.template.text = s.state?.template
+    }
+
+    override fun createEditor(): JComponent {
+        return form.wrapPanel
+    }
+
+    override fun applyEditorTo(s: FlexmlMockRunConfiguration) {
+        s.state?.port = form.port.text.toInt()
+        s.state?.dataSource = form.dataSource.text
+        s.state?.template = form.template.text
+    }
+}
+```
+
+接下来，我们要自定义ConfigurationType，同时我们还要在ConfigurationType的构造函数里注册一个ConfigurationFactory来生成我们之前写的Configuration。
+
+```kotlin
+class FlexmlMockConfigurationType : ConfigurationTypeBase(
+    "FlexmlMock",
+    "Flexml mock",
+    "begin run flexml mock task",
+    fileIcon
+) {
+    init {
+        addFactory(object : ConfigurationFactory(this) {
+            override fun createTemplateConfiguration(project: Project): RunConfiguration {
+                return FlexmlMockRunConfiguration(project, this)
+            }
+        })
+    }
+
+}
+```
+
+最后，我们还要把他注册到plugin.xml中：
+
+```xml
+    <extensions defaultExtensionNs="com.intellij">
+        <configurationType implementation="com.guet.flexbox.handshake.mock.FlexmlMockConfigurationType"/>
+      //省略其他...
+    </extensions>
+```
+
+但是现在我们的代码还不能运行，因为我们还没有实现`getState()`。
+
+### 8.2 实例：Gbox是怎样联合IDEA做到在真机上实时预览呢？
+
+【。。。】
 
 
 
-### 8.3 实例：Gbox是怎样联合IDEA做到在真机上实时预览呢？
+
+
+下面结合Gbox实现的mock机制，讲一下我实现的`getState()`。
 
 尝试玩过Gbox的同学一定知道，Gbox的一个核心特性就是能够在真机上实时预览。
 
 在同一网络环境中，通过使用Mock App扫描Studio提供的二维码，就可以在真机上实时预览布局。
 
-当然，在最初的版本中，这个功能还是比较鸡肋的，因为一开始Gbox的Mock模块是使用AndroidStudio的控制台来绘制二维码。这在白色主题下的Studio工作是完全正常的，但如果在黑色主题下，由于黑白颠倒，所以zxing库就无法识别了，导致有些同学扫码之后出错后者没反应，到最后不得不在后面的版本的控制台输出中加上让使用者更换Studio颜色的提示，这种体验实际上是相当糟糕的。
+当然，在最初的版本中，这个功能还是比较鸡肋的，因为一开始Gbox的Mock模块是使用AndroidStudio的控制台来绘制二维码。
 
-![](./assets/16e4128ca0f97d4b.png)
+<img src="./assets/16e4128ca0f97d4b.png" style="zoom: 50%;" />
 
-所以现在的版本将控制台绘制二维码，改为用可控的swing窗口进行绘制，无论Studio用什么主题二维码都可以被正常扫描。
+这在白色主题下的Studio工作是完全正常的，但如果在黑色主题下，由于黑白颠倒，所以zxing库就无法识别了，导致有些同学扫码之后出错后者没反应，到最后不得不在后面的版本的控制台输出中加上让使用者更换Studio颜色的提示，这种体验实际上是相当糟糕的。所以现在的版本将控制台绘制二维码，改为用可控的swing窗口进行绘制，无论Studio用什么主题二维码都可以被正常扫描。
 
 ![新二维码图片]()
 
@@ -652,6 +793,14 @@ ComponentConfiguration是我自己写的类，主要功能就是保存一些标�
 没错！这里我违背了jetbrains的推荐做法，没有把mock服务器和窗口放在一个独立的外部进程中去运行！至于为什么要这么做，我可以光明正大地告诉你纯粹是为了偷懒、为了方便、为了能用就行！但其实也不是，因为开启mock服务器这个程序实在是太轻量级了，而且又和插件密不可分，所以把它们打包，并且在一起运行在同一进程，才是最好地选择，并不全是因为我是一条懒狗。
 
 **PS**：但是真的不建议大家这么做啊，特别是当你要运行的调试程序本来就是一个外置程序的时候，不建议大家把代码内置，而应该继承了类似`BaseProcessHandler`之类ProcessHandler来启动外部程序。
+
+现在我们的运行配置能用了，可以通过`Edit Configurations...`手动添加要mock的布局了。
+
+![]()
+
+但是这样还是有点麻烦，能不能像识别Java的main函数一样在点击源码傍边的运行按钮时直接运行自动生成运行配置呢？
+
+### 8.3 像识别java的mian函数一样识别我们的代码
 
 ## 9 其他内容
 
