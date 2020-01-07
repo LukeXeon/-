@@ -113,7 +113,7 @@ PsiElement是用**双向链表**的方式来组织其子节点（子树的），
 
 当然，我们也可以通过任意一个PsiFile的子节点（比如XmlTag），在其上调用`psiElement.getContainingFile()`获取其PsiFile。
 
-一般来说我们编写的插件都是跟Java有关的，openapi中提供了一些快速获取Java Psi的工具类：
+下面举一些修改Psi的具体例子，一般来说我们编写的插件都是跟Java有关的，openapi中提供了一些快速获取Java Psi的工具类：
 
 * `PsiShortNamesCache.getInstance().getClassesByName()`通过一个短名称（例如LogUtil）查找类
 * `JavaPsiFacade.findClass()`按类名找类
@@ -240,6 +240,10 @@ CodeStyleManager.getInstance(directory.project).reformat(psiFile)
 ### 4.5 什么是VFS？
 
 VFS就是虚拟文件系统，与Psi不同，它是和Project无关的，所以`VirtualFileManager.getInstance()`不需要Project作为参数，它的VirtualFile更接近我们对一般文件的理解，它可以`getOutputStream()`和`getInputStream()`来对文件进行直接彻底的修改和读取，这都是Psi做不到的。
+
+除此之外VFS还有一个功能就是读取外部文件：
+
+【。。。。】
 
 ### 4.6 PSI与VFS的区别
 
@@ -471,7 +475,7 @@ object FlexmlFileType : XmlLikeFileType(XMLLanguage.INSTANCE) {
 
 熟悉编译原理的同学一定都知道yacc、flex、lexer、bnf之类的名词。
 
-但是很多人也许根本就不会真正地去开发一门新的语言，而是基于已经存在的语言制作插件来优化编码，真正能开发一门新语言的人也不会听我在这跟他讲BNF，这些东西放到这里讲我感觉有些超纲了，它们是属于编译原理中的知识，我自知我能力我不够，并且准备还不充分，所以就不在这误人子弟了，本段落点到为止，只是提一下IDEA支持这个功能，不会展开讲。
+这些东西放到这里讲我感觉有些超纲了，因为很多人也许根本就不会真正地去开发一门新的语言，而是基于已经存在的语言制作插件来优化编码，真正能开发一门新语言的人也不会听我在这跟他讲BNF，它们是属于编译原理中的知识，我自知我能力我不够，并且准备还不充分，所以就不在这误人子弟了，本段落点到为止，只是提一下IDEA支持这个功能，不会展开讲。
 
 IDEA是支持从BNF（巴科斯范式）来生成语法解析器的，而对于Lexer我们可以用[JFlex](https://jflex.de/)，这也是官方推荐的做法。感兴趣的同学可以[参考jetbrains的文档](http://www.jetbrains.org/intellij/sdk/docs/tutorials/custom_language_support/grammar_and_parser.html)，以及与编译原理相关的书籍。
 
@@ -483,11 +487,117 @@ IDEA是支持从BNF（巴科斯范式）来生成语法解析器的，而对于L
 
 ### 7.1 常规做法
 
-### 7.2 如果你也是基于xml改的，那么用这招可以省点力
+实现自动补全的常规做法是继承`CompletionContributor`，然后使用extend方法注册新的`CompletionProvider`，在addCompletions这个回调中向result添加LookupElement（就是写代码时，代码补全时会弹出来的那一排东西）。
 
-Gbox使用了XmlTagNameProvider来简化工作
+```kotlin
+class FlexmlCompletionContributor : CompletionContributor() {
 
+    init {
+        extend(CompletionType.BASIC, PlatformPatterns.psiElement(), object : CompletionProvider<CompletionParameters>() {
+            override fun addCompletions(
+                    parameters: CompletionParameters,
+                    context: ProcessingContext,
+                    result: CompletionResultSet
+            ) {
+                result.addElement(LookupElementBuilder.create("Hello Kexie"))
+            }
+        })
+    }
+}
+```
 
+LookupElement一般使用`LookupElementBuilder.create()`创建就可以了，并且你还可以改点东西，比如图标之类的。
+
+```kotlin
+LookupElementBuilder.create("test")//补全内容
+.withInsertHandler(XmlAttributeInsertHandler.INSTANCE)//插入处理器
+.withBoldness(true)//加粗
+.withIcon(tagIcon)//图标
+.withTypeText("case attribute (required)")//提示文本
+```
+
+`InsertHandler`是插入处理器，决定新的代码应该如何被插入到原本的代码中，可以自定义，也可以使用openapi提供的。
+
+在parameters这个参数中，我们还可以获取当前的Psi位置，以此来做一些判断，比如在Xml中：
+
+* 判断文件是否为特殊格式
+
+```kotlin
+val PsiElement.isOnFlexmlFile: Boolean
+    get() {
+        return if (this.containingFile != null) {
+            this.containingFile.name.toLowerCase()
+                .endsWith("." + FlexmlFileType.defaultExtension)
+        } else {
+            false
+        }
+    }
+
+//❗️代码已经精简，下面代码的意思就是判断当前的psi是否在后缀为.flexml的文件内，若不在则放弃补全
+if (!parameters.position.isOnFlexmlFile) {
+    return
+}
+//TODO...添加LookupElement
+```
+
+* 判断是否正在补全XmlAttribute的Value
+
+```kotlin
+val position = parameters.position
+if (position.node.elementType === XmlElementType.XML_ATTRIBUTE_VALUE_TOKEN) {
+    val attr = PsiTreeUtil.getParentOfType(position,XmlAttribute::class.java)
+  	if(attr!=null){
+      //TODO...添加LookupElement
+    }
+}   
+```
+
+编写完`CompletionContributor`之后，我们还要在plugin.xml中注册，使其生效。
+
+```xml
+    <extensions defaultExtensionNs="com.intellij">
+        <completion.contributor
+                language="XML"
+                implementationClass="com.guet.flexbox.handshake.lang.FlexmlCompletionContributor"/>
+    </extensions>
+```
+
+### 7.2 对于xml的特殊支持
+
+如果你编写的插件也是为了扩展xml的工呢，那么你还可以使用XmlTagNameProvider来简化工作。
+
+```kotlin
+class FlexmlTagNameProvider : DefaultXmlTagNameProvider() {
+
+    private val allTags = ComponentConfiguration.allComponentNames.map {
+        LookupElementBuilder.create(it)
+            .withInsertHandler(XmlTagInsertHandler.INSTANCE)
+            .withBoldness(true)
+            .withIcon(tagIcon)
+            .withTypeText("flexml component")
+    }
+
+    override fun addTagNameVariants(
+        elements: MutableList<LookupElement>,
+        tag: XmlTag,
+        prefix: String?
+    ) {
+        super.addTagNameVariants(elements, tag, prefix)
+        if (!tag.isOnFlexmlFile) {
+            return
+        }
+        elements.addAll(allTags)
+    }
+}
+```
+
+当然，它也要注册：
+
+```xml
+     <xml.tagNameProvider implementation="com.guet.flexbox.handshake.lang.FlexmlTagNameProvider"/>
+```
+
+ComponentConfiguration是我自己写的类，主要功能就是保存一些标签的信息（主要是名字），在上面我把我定义的标签map成了LookupElement，然后缓存了起来。这样每次xml要补全tag的时候这里的代码就会得到调用，为我们添加自定义的LookupElement。
 
 ## 8 让我们的DSL在IDEA上跑起来
 
@@ -499,7 +609,7 @@ Gbox使用了XmlTagNameProvider来简化工作
 
 
 
-### 8.3 Gbox是怎样做到在真机上实时预览呢？
+### 8.3 实例：Gbox是怎样联合IDEA做到在真机上实时预览呢？
 
 尝试玩过Gbox的同学一定知道，Gbox的一个核心特性就是能够在真机上实时预览。
 
@@ -513,7 +623,7 @@ Gbox使用了XmlTagNameProvider来简化工作
 
 ![新二维码图片]()
 
-原理很简单，因为IDEA本身就是swing写的，有Java的图形环境，所以直接弹出一个JFrame就完事了。二维码是用Google的zxing生成的，然后搞了一个awt的BuffedImage渲染上去，纯属调API操作，但是代码有点多，我挂在github上了，感兴趣的同学可以自己点开来看：
+原理很简单，因为IDEA本身就是swing写的，有Java的图形环境，所以直接弹出一个JFrame就完事了。二维码是用Google的zxing生成的，然后搞了一个awt的BuffedImage渲染上去，纯属调API操作，但是代码有点多，我不往文章里贴了，都往github上挂，感兴趣的同学可以去看看：
 
 [src/main/kotlin/com/guet/flexbox/handshake/mock/QrCodeForm.kt](https://github.com/sanyuankexie/handshake/blob/master/src/main/kotlin/com/guet/flexbox/handshake/mock/QrCodeForm.kt)
 
@@ -539,7 +649,7 @@ Gbox使用了XmlTagNameProvider来简化工作
 
 ### 9.1 还可以做哪些事情？
 
-Gbox其实在这方面做得是不完整的。
+Gbox其实在这些方面做得是不够完整的。
 
 ### 9.2 openapi中的常用类和方法
 
