@@ -20,7 +20,7 @@
 ## 3 新建IDEA插件项目
 这里我建议选择的Gradle来进行开发，这样集成依赖会非常方便。记得一定要在右边勾选Interllij Platform Plugin和Java，如果想用Kotlin进行开发，下面的kotlin/JVM也要勾上（如果你跟着本文走的话，建议勾上）。
 
-![16f5b7d01a3d436c](./assets/16f5b7d01a3d436c-1577795994585.png)
+![16f5b7d01a3d436c](./assets/16f5b7d01a3d436c.png)
 
 当然你也可以不选择Gradle使用上面的Interllij Platform Plugin，但是这样，你就没法用kotlin了。
 ![16f5b806585b4230](./assets/16f5b806585b4230-1577796020140.png)
@@ -564,7 +564,7 @@ if (position.node.elementType === XmlElementType.XML_ATTRIBUTE_VALUE_TOKEN) {
 
 ### 7.2 对于xml的特殊支持
 
-如果你编写的插件也是为了扩展xml的工呢，那么你还可以使用XmlTagNameProvider来简化工作。
+如果你编写的插件也是为了扩展xml的功能，那么你还可以使用XmlTagNameProvider来简化工作。
 
 ```kotlin
 class FlexmlTagNameProvider : DefaultXmlTagNameProvider() {
@@ -602,6 +602,8 @@ ComponentConfiguration是我自己写的类，主要功能就是保存一些标�
 ## 8 让我们的DSL在IDEA上跑起来
 
 ### 8.1 要跑起来肯定要先有运行配置啦！
+
+运行配置？相信我这么一说很多人都会对这个概念很陌生，因为我们通常做Android开发或者web开发的时候，都是直接点运行按钮之后什么都不管了，但其实我们点击运行按钮的动作，是执行对应的运行配置。
 
 
 
