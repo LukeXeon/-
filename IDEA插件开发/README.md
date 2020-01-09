@@ -868,6 +868,10 @@ openapi代码质量是很高，但很多源码没注释没文档但还是感觉�
 * 与**Gbox**配套的IDEA插件【[handshake](https://github.com/sanyuankexie/handshake)】
 * weex的IDEA插件【[weex-language-support](https://github.com/misakuo/weex-language-support)】
 
-### 10.4 关于我
+### 10.4如何体验handshake插件？
+
+【。。。。】
+
+### 10.5 关于我
 
 之前在掘金上发沸点，可能是因为我说话太骚了，居然有人质疑我是骗子，偏赞的那种，我也是醉了，虽然后来澄清了，不过还是在这里解释一下，我是应届生，双非二本本科，然拿了offer，但是人还没毕业入职呢。自己很关心前沿技术和核心技术的发展，所以也会写一些所谓的技术文章，热衷于分享和开源，对自己学过的技术不会保留，只是可能没事间码那么多字罢了（说到底还不是因为我是一条懒狗）。
